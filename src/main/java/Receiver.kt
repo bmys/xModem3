@@ -1,9 +1,12 @@
 import org.joda.time.DateTime
 import org.joda.time.Minutes.minutes
 import org.joda.time.Seconds.seconds
+import sun.misc.CRC16
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.ByteBuffer
 import java.util.*
+import java.util.zip.CRC32
 import kotlin.experimental.inv
 
 fun initTransmission(outputStream: OutputStream, transmissionType: ControlChars) {
@@ -52,6 +55,8 @@ fun collectData(transmissionTypeChar: ControlChars, inputStream: InputStream, ou
 
     }
         while(rec != null)
+    outputStream.write(byteArrayOf(ControlChars.ACK.char))
+    writeToFile("./test.txt", msg)
 }
 
 fun getData(packetNumber: Int, transmissionTypeChar: ControlChars, inputStream: InputStream, outputStream: OutputStream): LinkedList<Byte>?{
@@ -91,10 +96,38 @@ fun getData(packetNumber: Int, transmissionTypeChar: ControlChars, inputStream: 
             return msg
         }
     }
+
+        // for CRC
+        else if(transmissionTypeChar == ControlChars.NAK){
+
+        val (controlSum, msg) = getDataWithCRC(inputStream)
+        val receivedControlSum = receiveBytes(inputStream, 2)
+
+        // check control sum
+        val buffer = ByteBuffer.wrap(receivedControlSum)
+
+        if(controlSum != buffer.long){
+            // incorrect checksum
+            outputStream.write(byteArrayOf(ControlChars.NAK.char))
+            return getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
+        }
+
+        return if(!isHeaderProper(header, packetNumber)){
+            // incorrect checksum
+            outputStream.write(byteArrayOf(ControlChars.NAK.char))
+            getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
+        }
+
+        else{
+            outputStream.write(byteArrayOf(ControlChars.ACK.char))
+            return msg
+        }
+    }
     }
 
     return null
 }
+
 
 fun getDataWithAlgebraicSum(inputStream: InputStream): Pair<Byte, LinkedList<Byte>>{
     var algebraicSum: Byte = 0
@@ -110,9 +143,21 @@ fun getDataWithAlgebraicSum(inputStream: InputStream): Pair<Byte, LinkedList<Byt
     return Pair(algebraicSum, msg)
 }
 
-fun isSomethingCame(inputStream: InputStream): Boolean {
-    return inputStream.available() > 0
+
+fun getDataWithCRC(inputStream: InputStream): Pair<Long, LinkedList<Byte>>{
+    val msg = LinkedList<Byte>()
+    val crc = CRC16()
+
+    while (msg.size <= 128) {
+        val rec = getByte(inputStream)
+        if (rec != null) {
+            msg.add(rec)
+            crc.update(rec)
+        }
+    }
+    return Pair(crc.value, msg)
 }
+
 
 fun isHeaderProper(msg: ByteArray, packetNumber: Int): Boolean {
     if (msg.size != 2)
@@ -125,16 +170,4 @@ fun isHeaderProper(msg: ByteArray, packetNumber: Int): Boolean {
         return false
 
     return true
-}
-
-fun receiveBytes(inputStream: InputStream, count: Int): ByteArray {
-    val bitList = LinkedList<Byte>()
-
-    while (bitList.size <= count) {
-        val rec = getByte(inputStream)
-        if (rec != null) {
-            bitList.add(rec)
-        }
-    }
-    return bitList.toByteArray()
 }
