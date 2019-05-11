@@ -40,14 +40,33 @@ fun start(transmissionTypeChar: ControlChars, inputStream: InputStream, outputSt
 
 fun collectData(transmissionTypeChar: ControlChars, inputStream: InputStream, outputStream: OutputStream){
     var packetNumber = 1
+    val msg = LinkedList<Byte>()
 
+    do{
+        val rec = getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
 
+        if(rec != null){
+            msg.addAll(rec)
+            packetNumber++
+        }
 
+    }
+        while(rec != null)
 }
 
-fun getData(transmissionTypeChar: ControlChars, inputStream: InputStream, outputStream: OutputStream): LinkedList<Byte>?{
-    // read header
-    val header = receiveBytes(inputStream, 3)
+fun getData(packetNumber: Int, transmissionTypeChar: ControlChars, inputStream: InputStream, outputStream: OutputStream): LinkedList<Byte>?{
+
+    // if EOT arrived return null if SOH continue
+    val firstHeaderByte = receiveBytes(inputStream, 1)
+
+    if(firstHeaderByte[0] == ControlChars.EOT.char){
+        return null
+    }
+
+    else if(firstHeaderByte[0] == ControlChars.SOH.char){
+
+    // read header packet number, packet number completion
+    val header = receiveBytes(inputStream, 2)
 
     if(transmissionTypeChar == ControlChars.C){
         val (controlSum, msg) = getDataWithAlgebraicSum(inputStream)
@@ -57,20 +76,21 @@ fun getData(transmissionTypeChar: ControlChars, inputStream: InputStream, output
         if(controlSum != receivedControlSum[0]){
             // incorrect checksum
             outputStream.write(byteArrayOf(ControlChars.NAK.char))
-            return getData(transmissionTypeChar, inputStream, outputStream)
+            return getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
 
         }
 
-        return if(!isHeaderProper(header)){
+        return if(!isHeaderProper(header, packetNumber)){
             // incorrect checksum
             outputStream.write(byteArrayOf(ControlChars.NAK.char))
-            getData(transmissionTypeChar, inputStream, outputStream)
+            getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
         }
 
         else{
             outputStream.write(byteArrayOf(ControlChars.ACK.char))
             return msg
         }
+    }
     }
 
     return null
@@ -94,14 +114,14 @@ fun isSomethingCame(inputStream: InputStream): Boolean {
     return inputStream.available() > 0
 }
 
-fun isHeaderProper(msg: ByteArray): Boolean {
-    if (msg.size != 3)
+fun isHeaderProper(msg: ByteArray, packetNumber: Int): Boolean {
+    if (msg.size != 2)
         return false
 
-    if (msg[0] != ControlChars.SOH.char)
+    if(msg[0] != packetNumber.toByte())
         return false
 
-    if (msg[1] != msg[2].inv())
+    if (msg[0] != msg[1].inv())
         return false
 
     return true
