@@ -1,12 +1,9 @@
 import org.joda.time.DateTime
 import org.joda.time.Minutes.minutes
 import org.joda.time.Seconds.seconds
-import sun.misc.CRC16
 import java.io.InputStream
 import java.io.OutputStream
-import java.nio.ByteBuffer
 import java.util.*
-import java.util.zip.CRC32
 import kotlin.experimental.inv
 
 fun initTransmission(outputStream: OutputStream, transmissionType: ControlChars) {
@@ -49,10 +46,12 @@ fun collectData(transmissionTypeChar: ControlChars, inputStream: InputStream, ou
         val rec = getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
 
         if(rec != null){
+            if(packetNumber == 256){
+                packetNumber = 1
+            }
             msg.addAll(rec)
             packetNumber++
         }
-
     }
         while(rec != null)
     outputStream.write(byteArrayOf(ControlChars.ACK.char))
@@ -104,16 +103,16 @@ fun getData(packetNumber: Int, transmissionTypeChar: ControlChars, inputStream: 
         val receivedControlSum = receiveBytes(inputStream, 2)
 
         // check control sum
-        val buffer = ByteBuffer.wrap(receivedControlSum)
+//        val buffer = ByteBuffer.wrap(receivedControlSum)
 
-        if(controlSum != buffer.long){
+        if(!controlSum.contentEquals(receivedControlSum)){
             // incorrect checksum
             outputStream.write(byteArrayOf(ControlChars.NAK.char))
             return getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
         }
 
         return if(!isHeaderProper(header, packetNumber)){
-            // incorrect checksum
+            // incorrect header
             outputStream.write(byteArrayOf(ControlChars.NAK.char))
             getData(packetNumber, transmissionTypeChar, inputStream, outputStream)
         }
@@ -144,18 +143,18 @@ fun getDataWithAlgebraicSum(inputStream: InputStream): Pair<Byte, LinkedList<Byt
 }
 
 
-fun getDataWithCRC(inputStream: InputStream): Pair<Long, LinkedList<Byte>>{
+fun getDataWithCRC(inputStream: InputStream): Pair<ByteArray, LinkedList<Byte>>{
     val msg = LinkedList<Byte>()
-    val crc = CRC16()
 
     while (msg.size <= 128) {
         val rec = getByte(inputStream)
         if (rec != null) {
             msg.add(rec)
-            crc.update(rec)
         }
     }
-    return Pair(crc.value, msg)
+
+    val crc = CRC_16.get(msg.toByteArray())
+    return Pair(crc, msg)
 }
 
 

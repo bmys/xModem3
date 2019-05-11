@@ -21,24 +21,41 @@ fun startTransmission(file: File, inputStream: InputStream, outputStream: Output
     var counter = 1
 
     for(packet in packets){
-        if (counter == 255){
-            counter = 0
+        if (counter == 256){
+            counter = 1
+        }
+
+        if(send(inputStream, outputStream, counter, packet, crc) == 1){
+            println("Transmission canceled")
+            return
         }
         counter++
-
-        send(inputStream, outputStream, counter, packet, crc)
     }
     // end of file
     // check toInt
     outputStream.write(byteArrayOf(ControlChars.EOT.char))
 }
 
-fun send(inputStream: InputStream, outputStream: OutputStream, counter: Int, packet: List<Byte>, crc: Boolean){
+fun send(inputStream: InputStream, outputStream: OutputStream, counter: Int, packet: List<Byte>, crc: Boolean): Int {
     sendHeader(outputStream, counter)
-    if(crc)
-        transmissionWithCRC(inputStream, outputStream, packet)
-    else
-        transmissionWithSum(inputStream, outputStream, packet)
+    while(true){
+        if(crc)
+            transmissionWithCRC(outputStream, packet)
+        else
+            transmissionWithSum(outputStream, packet)
+
+        val rec = getByte(inputStream)
+
+        if(rec == ControlChars.NAK.char)
+            continue
+
+        if(rec == ControlChars.ACK.char)
+            break
+
+        if(rec == ControlChars.CAN.char)
+            return 1
+    }
+    return 0
 }
 
 
@@ -47,16 +64,19 @@ fun sendHeader(outputStream: OutputStream, packetNumber: Int){
     outputStream.write(header)
 }
 
-fun transmissionWithSum(inputStream: InputStream, outputStream: OutputStream, packet: List<Byte>){
+fun transmissionWithSum(outputStream: OutputStream, packet: List<Byte>){
+    var checksum: Byte = 0
 
+    for(byte in packet){
+        checksum = checksum.plus(byte).toByte()
+    }
+
+    outputStream.write(packet.toByteArray())
+    outputStream.write(byteArrayOf(checksum))
 }
 
-fun transmissionWithCRC(inputStream: InputStream, outputStream: OutputStream, packet: List<Byte>){
-    val crc = CRC16()
-    val byteArr = packet.toByteArray()
-    for (byte in packet){
-        crc.update(byte)
-    }
-    outputStream.write(byteArr)
-    outputStream.write(crc.value)
+fun transmissionWithCRC( outputStream: OutputStream, packet: List<Byte>){
+    val checksum = CRC_16.get(packet.toByteArray())
+    outputStream.write(packet.toByteArray())
+    outputStream.write(checksum)
 }
