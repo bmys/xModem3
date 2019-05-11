@@ -33,23 +33,61 @@ fun start(transmissionTypeChar: ControlChars, inputStream: InputStream, outputSt
         }
     }
     if(isGood)
-        getData(inputStream)
+        collectData(transmissionTypeChar, inputStream, outputStream)
     else
         println("Cannot start transmission!")
 }
 
-fun getData(inputStream: InputStream) {
+fun collectData(transmissionTypeChar: ControlChars, inputStream: InputStream, outputStream: OutputStream){
+    var packetNumber = 1
+
+
+
+}
+
+fun getData(transmissionTypeChar: ControlChars, inputStream: InputStream, outputStream: OutputStream): LinkedList<Byte>?{
     // read header
     val header = receiveBytes(inputStream, 3)
 
+    if(transmissionTypeChar == ControlChars.C){
+        val (controlSum, msg) = getDataWithAlgebraicSum(inputStream)
+        val receivedControlSum = receiveBytes(inputStream, 1)
+
+        // check control sum
+        if(controlSum != receivedControlSum[0]){
+            // incorrect checksum
+            outputStream.write(byteArrayOf(ControlChars.NAK.char))
+            return getData(transmissionTypeChar, inputStream, outputStream)
+
+        }
+
+        return if(!isHeaderProper(header)){
+            // incorrect checksum
+            outputStream.write(byteArrayOf(ControlChars.NAK.char))
+            getData(transmissionTypeChar, inputStream, outputStream)
+        }
+
+        else{
+            outputStream.write(byteArrayOf(ControlChars.ACK.char))
+            return msg
+        }
+    }
+
+    return null
+}
+
+fun getDataWithAlgebraicSum(inputStream: InputStream): Pair<Byte, LinkedList<Byte>>{
+    var algebraicSum: Byte = 0
     val msg = LinkedList<Byte>()
 
     while (msg.size <= 128) {
-        val rec = getInput(inputStream)
+        val rec = getByte(inputStream)
         if (rec != null) {
-            msg.addAll(rec.asList())
+            msg.add(rec)
+            algebraicSum = algebraicSum.plus(rec).toByte()
         }
     }
+    return Pair(algebraicSum, msg)
 }
 
 fun isSomethingCame(inputStream: InputStream): Boolean {
@@ -73,9 +111,9 @@ fun receiveBytes(inputStream: InputStream, count: Int): ByteArray {
     val bitList = LinkedList<Byte>()
 
     while (bitList.size <= count) {
-        val rec = getInput(inputStream)
+        val rec = getByte(inputStream)
         if (rec != null) {
-            bitList.addAll(rec.asList())
+            bitList.add(rec)
         }
     }
     return bitList.toByteArray()

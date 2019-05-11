@@ -1,3 +1,4 @@
+import com.google.common.io.ByteStreams
 import java.io.InputStream
 
 fun getInput(inputStream: InputStream): ByteArray?{
@@ -7,9 +8,11 @@ fun getInput(inputStream: InputStream): ByteArray?{
     return null
 }
 
-fun getByte(inputStream: BitStream): Byte?{
+fun getByte(inputStream: InputStream): Byte?{
+    val byteArray = ByteArray(1)
     if(inputStream.available() > 0) {
-        return inputStream.readBytes()
+        ByteStreams.read(inputStream, byteArray, 0, 1)
+        return byteArray[0]
     }
     return null
 }
